@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ใส่ข้อมูลตัวอย่าง · LeaveEasy</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>เครื่องมือใส่ข้อมูลตัวอย่างลง Firestore</h1>
+    <p class="subtitle">
+      ใช้ครั้งเดียวตอนตั้งค่าโปรเจกต์ (สัปดาห์ที่ 6) — กดซ้ำได้ไม่เป็นไร เพราะ doc id ตายตัว
+      ไม่สร้างข้อมูลซ้ำ · ลบไฟล์นี้ทิ้งได้เมื่อใช้เสร็จแล้ว
+    </p>
+
+    <div class="btn-row">
+      <button id="ปุ่มใส่ข้อมูล" class="btn">ใส่ข้อมูลตัวอย่างลง Firestore</button>
+    </div>
+
+    <pre id="บันทึก" class="card" style="margin-top:16px; white-space:pre-wrap"></pre>
+  </div>
+
+  <script type="module">
+    import { ใส่ข้อมูลตัวอย่าง } from "./js/seed.js";
+
+    var บันทึก = document.getElementById("บันทึก");
+    var ปุ่ม = document.getElementById("ปุ่มใส่ข้อมูล");
+
+    ปุ่ม.addEventListener("click", async function () {
+      ปุ่ม.disabled = true;
+      บันทึก.textContent = "กำลังใส่ข้อมูล…\n";
+      try {
+        await ใส่ข้อมูลตัวอย่าง(function (บรรทัด) {
+          บันทึก.textContent += บรรทัด + "\n";
+        });
+      } catch (ข้อผิดพลาด) {
+        บันทึก.textContent += "❌ ผิดพลาด: " + ข้อผิดพลาด.message + "\n";
+      } finally {
+        ปุ่ม.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
