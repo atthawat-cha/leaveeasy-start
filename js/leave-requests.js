@@ -29,6 +29,8 @@ import { collection, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/
       "กำลังแสดงเฉพาะใบลาที่สถานะ " + สถานะที่กรอง + " · กดเมนู รายการใบลา เพื่อดูทั้งหมด";
   }
 
+  document.getElementById("จำนวนทั้งหมด").textContent = "ทั้งหมด " + ใบลาทั้งหมด.length + " ใบ";
+
   แสดงตาราง(ใบลาทั้งหมด);
 
   function แสดงตาราง(รายการ) {
