@@ -1,10 +1,11 @@
 // ─────────────────────────────────────────────────────────────
 // js/new-leave-request.js — หน้าที่ 2 ยื่นใบลาใหม่
 // สัปดาห์ที่ 7: บันทึกใบลาใหม่ลงฐานข้อมูลจริง (Firestore) — โฟลเดอร์ leaveRequests
+// requesterId/requesterName มาจากผู้ใช้ที่ล็อกอินอยู่จริง (js/auth-guard.js บังคับล็อกอินก่อนแล้ว)
 // ─────────────────────────────────────────────────────────────
 
-import { db } from "./firebase-config.js";
-import { collection, addDoc } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import { db, auth } from "./firebase-config.js";
+import { collection, addDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
 (function () {
   var ฟอร์ม = document.getElementById("ฟอร์มใบลา");
@@ -20,8 +21,14 @@ import { collection, addDoc } from "https://www.gstatic.com/firebasejs/12.18.0/f
     ช่องประเภท.appendChild(ตัวเลือก);
   });
 
-  ฟอร์ม.addEventListener("submit", function (e) {
+  ฟอร์ม.addEventListener("submit", async function (e) {
     e.preventDefault();
+
+    var ผู้ใช้ = auth.currentUser;
+    if (!ผู้ใช้) {
+      location.href = "login.html";
+      return;
+    }
 
     var ค่า = {
       title: document.getElementById("title").value.trim(),
@@ -43,29 +50,30 @@ import { collection, addDoc } from "https://www.gstatic.com/firebasejs/12.18.0/f
 
     var ประเภท = window.LEAVE_DATA.leaveTypes.find(function (t) { return t.id === ค่า.leaveTypeId; });
 
-    // สัปดาห์ที่ 7 ยังไม่มีล็อกอิน จึงสมมติว่าผู้ขอลาคือ สมชาย ใจดี
-    var ใบใหม่ = {
-      title: ค่า.title,
-      reason: ค่า.reason,
-      status: "รอพิจารณา",                       // ใบใหม่เริ่มที่ รอพิจารณา เสมอ
-      requesterId: "u001", requesterName: "สมชาย ใจดี",
-      approverId: "",      approverName: "",
-      leaveTypeId: ประเภท.id, leaveTypeName: ประเภท.name,
-      startDate: ค่า.startDate,
-      endDate: ค่า.endDate,
-      createdAt: เวลาตอนนี้()
-    };
-
     ปุ่มบันทึก.disabled = true;
 
-    addDoc(collection(db, "leaveRequests"), ใบใหม่)
-      .then(function () {
-        location.href = "leave-requests.html";
-      })
-      .catch(function (ข้อผิดพลาด) {
-        เตือน("บันทึกลง Firestore ไม่สำเร็จ: " + ข้อผิดพลาด.message);
-        ปุ่มบันทึก.disabled = false;
-      });
+    try {
+      var เอกสารผู้ใช้ = await getDoc(doc(db, "users", ผู้ใช้.uid));
+      var ชื่อผู้ขอลา = เอกสารผู้ใช้.exists() ? เอกสารผู้ใช้.data().name : ผู้ใช้.email;
+
+      var ใบใหม่ = {
+        title: ค่า.title,
+        reason: ค่า.reason,
+        status: "รอพิจารณา",                       // ใบใหม่เริ่มที่ รอพิจารณา เสมอ
+        requesterId: ผู้ใช้.uid, requesterName: ชื่อผู้ขอลา,
+        approverId: "",      approverName: "",
+        leaveTypeId: ประเภท.id, leaveTypeName: ประเภท.name,
+        startDate: ค่า.startDate,
+        endDate: ค่า.endDate,
+        createdAt: เวลาตอนนี้()
+      };
+
+      await addDoc(collection(db, "leaveRequests"), ใบใหม่);
+      location.href = "leave-requests.html";
+    } catch (ข้อผิดพลาด) {
+      เตือน("บันทึกลง Firestore ไม่สำเร็จ: " + ข้อผิดพลาด.message);
+      ปุ่มบันทึก.disabled = false;
+    }
   });
 
   function เตือน(ข้อความ) {
