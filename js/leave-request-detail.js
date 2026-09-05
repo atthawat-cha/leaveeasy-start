@@ -1,11 +1,12 @@
 // ─────────────────────────────────────────────────────────────
 // js/leave-request-detail.js — หน้าที่ 3 รายละเอียดใบลา
 // สัปดาห์ที่ 6: อ่านใบลาและความเห็นจากฐานข้อมูลจริง (Firestore)
-// การอนุมัติ/ไม่อนุมัติ และการส่งความเห็น ยังเปลี่ยนแค่ในหน่วยความจำ (เขียนจริงในสัปดาห์ที่ 7)
+// สัปดาห์ที่ 7: ปุ่มอนุมัติ/ไม่อนุมัติ เขียนสถานะกลับ Firestore จริง (แก้เฉพาะช่อง status)
+// การส่งความเห็น ยังเปลี่ยนแค่ในหน่วยความจำ (เขียนจริงทีหลัง)
 // ─────────────────────────────────────────────────────────────
 
 import { db } from "./firebase-config.js";
-import { doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import { doc, getDoc, updateDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
 (async function () {
   var รหัสใบลา = ค่าจากURL("id");
@@ -23,9 +24,7 @@ import { doc, getDoc, collection, getDocs } from "https://www.gstatic.com/fireba
         ความเห็น.push(Object.assign({ id: c.id }, c.data()));
       });
     } else {
-      // ใบที่เพิ่งยื่นในหน้าที่ 2 ยังไม่ถูกบันทึกลง Firestore (เขียนจริงในสัปดาห์ที่ 7)
-      var ใบลาที่ยื่นใหม่ = JSON.parse(sessionStorage.getItem("ใบลาที่ยื่นใหม่") || "[]");
-      ใบ = ใบลาที่ยื่นใหม่.find(function (x) { return x.id === รหัสใบลา; });
+      ใบ = null;
       ความเห็น = [];
     }
   } catch (ข้อผิดพลาด) {
@@ -61,34 +60,65 @@ import { doc, getDoc, collection, getDocs } from "https://www.gstatic.com/fireba
       return '<div class="field-row"><span class="k">' + r[0] + "</span><span>" + r[1] + "</span></div>";
     }).join("");
 
-    // ปุ่มอนุมัติ / ไม่อนุมัติ ขึ้นเฉพาะใบที่ยังรอพิจารณา
-    if (ใบ.status === "รอพิจารณา") {
-      html +=
-        '<div class="btn-row">' +
-        '<button type="button" class="btn-ok" id="ปุ่มอนุมัติ">อนุมัติ</button>' +
-        '<button type="button" class="btn-danger" id="ปุ่มไม่อนุมัติ">ไม่อนุมัติ</button>' +
-        "</div>";
-    } else {
+    // ปุ่มอนุมัติ / ไม่อนุมัติ — กดได้เฉพาะใบที่ยังรอพิจารณา นอกนั้น disabled
+    var กดได้ = ใบ.status === "รอพิจารณา";
+    html +=
+      '<div class="btn-row">' +
+      '<button type="button" class="btn-ok" id="ปุ่มอนุมัติ"' + (กดได้ ? "" : " disabled") + '>อนุมัติ</button>' +
+      '<button type="button" class="btn-danger" id="ปุ่มไม่อนุมัติ"' + (กดได้ ? "" : " disabled") + '>ไม่อนุมัติ</button>' +
+      "</div>";
+    if (!กดได้) {
       html += '<p class="hint">ใบนี้พิจารณาแล้ว จึงเปลี่ยนสถานะต่อไม่ได้</p>';
     }
 
+    // ปุ่มลบ — ลบได้เฉพาะใบที่ยังรอพิจารณา นอกนั้น disabled
+    html +=
+      '<div class="btn-row">' +
+      '<button type="button" class="btn-danger" id="ปุ่มลบ"' + (กดได้ ? "" : " disabled") + '>ลบใบลานี้</button>' +
+      "</div>";
+
     กล่องใบลา.innerHTML = html;
 
-    if (ใบ.status === "รอพิจารณา") {
-      document.getElementById("ปุ่มอนุมัติ").addEventListener("click", function () { เปลี่ยนสถานะ("อนุมัติ"); });
-      document.getElementById("ปุ่มไม่อนุมัติ").addEventListener("click", function () { เปลี่ยนสถานะ("ไม่อนุมัติ"); });
-    }
+    document.getElementById("ปุ่มอนุมัติ").addEventListener("click", function () { เปลี่ยนสถานะ("อนุมัติ"); });
+    document.getElementById("ปุ่มไม่อนุมัติ").addEventListener("click", function () { เปลี่ยนสถานะ("ไม่อนุมัติ"); });
+    document.getElementById("ปุ่มลบ").addEventListener("click", ลบใบลา);
   }
 
-  // ── เปลี่ยนสถานะ (สัปดาห์นี้เปลี่ยนแค่ในหน่วยความจำ ยังไม่เขียนกลับ Firestore) ──
-  function เปลี่ยนสถานะ(สถานะใหม่) {
+  // ── เปลี่ยนสถานะ — เขียนกลับ Firestore เฉพาะช่อง status เท่านั้น ──
+  async function เปลี่ยนสถานะ(สถานะใหม่) {
+    if (ใบ.status !== "รอพิจารณา") return;
+
     // กฎ: จะไม่อนุมัติได้ ต้องมีความเห็นอย่างน้อย 1 รายการก่อน
     if (สถานะใหม่ === "ไม่อนุมัติ" && ความเห็น.length === 0) {
       alert("ต้องเขียนความเห็นอย่างน้อย 1 รายการก่อน จึงจะกดไม่อนุมัติได้");
       return;
     }
-    ใบ.status = สถานะใหม่;   // แก้เฉพาะช่อง status เท่านั้น
+
+    try {
+      await updateDoc(doc(db, "leaveRequests", รหัสใบลา), { status: สถานะใหม่ });
+    } catch (ข้อผิดพลาด) {
+      alert("บันทึกสถานะลง Firestore ไม่สำเร็จ: " + ข้อผิดพลาด.message);
+      return;
+    }
+
+    ใบ.status = สถานะใหม่;
     วาดใบลา();
+  }
+
+  // ── ลบใบลา — ลบได้เฉพาะใบที่ยังรอพิจารณา ต้องยืนยันก่อนเสมอ ──
+  async function ลบใบลา() {
+    if (ใบ.status !== "รอพิจารณา") return;
+
+    if (!confirm("ยืนยันการลบใบลานี้หรือไม่ — ลบแล้วกู้คืนไม่ได้")) return;
+
+    try {
+      await deleteDoc(doc(db, "leaveRequests", รหัสใบลา));
+    } catch (ข้อผิดพลาด) {
+      alert("ลบใบลาไม่สำเร็จ: " + ข้อผิดพลาด.message);
+      return;
+    }
+
+    location.href = "leave-requests.html";
   }
 
   // ── รายการความเห็น เรียงจากเก่าไปใหม่ ──
